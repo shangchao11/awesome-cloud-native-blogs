@@ -1,30 +1,24 @@
-﻿# 原文
-在RedHat的一篇关于项目管理，资源分配的文章
-![在这里插入图片描述](https://img-blog.csdnimg.cn/add313090d4b431fb62f6072cb8801da.png?x-oss-process=image/watermark,type_ZHJvaWRzYW5zZmFsbGJhY2s,shadow_50,text_Q1NETiBA5ZWG5pyd,size_20,color_FFFFFF,t_70,g_se,x_16)
-
-[英文原文](https://cloud.redhat.com/blog/improving-the-resource-efficiency-for-openshift-clusters-via-trimaran-schedulers)
-# 译文
-## 资源管理面临的问题
+﻿# 资源管理面临的问题
 在OpenShift中，作为开发者，您可以通过请求去设置资源，以规定指定容器需要多少资源(CPU、内存和其他)。“Request”是容器保证得到的内容。容器的总请求之后被程序调度器使用，而且它会决定放置在哪个相对空闲的Pod节点上。
-## 实践中设置请求资源是十分困难的
+# 实践中设置请求资源是十分困难的
 为容器设置请求不是一项简单的任务。在实践中，开发者通常会过度供应容器的资源，以避免供应不足的风险，包括由于内存不足而导致的Pod迁移以及由于资源不足而导致的应用程序性能低下等问题。将请求资源设置得远远高于实际使用量会导致严重的资源过度配置和非常低的资源效率。这些资源是保留的，但实践中没有使用。而将请求资源设置得太低或完全忽略请求的突然峰值也不能解决问题，因为对容器没有QoS（Quality of Service，服务质量）保证。
-## 基准测试很麻烦，并不是对所有的工作负载都可行
+# 基准测试很麻烦，并不是对所有的工作负载都可行
 有人可能提倡对实际负载下的容器的资源使用进行基准测试，以这种方式应该为请求设置什么多大的资源。然而，对于涉及数十个微服务的应用程序，单纯地对这些微服务逐个进行基准测试需要大量的手工工作和资源消耗，这与我们提高资源效率的目的背道而驰。此外，为每个微服务生成实际负载量是一项不可能完成的任务，因为您永远不知道用户调用接口的访问量根据时间段，节日的不同会有多大的变动。
-## OverCommitting是有风险的
+# OverCommitting是有风险的
 当Pod申请的请求资源太大时，集群将Pod放置在过度提交的节点上肯定会节省更多资源。然而，到底有多少资源是过度供应的呢?一些应用程序可能有一块双核CPU供应资源，而应用程序可能只需要200毫核。如果不考虑它们的实际使用情况，并且它们都被调度到同一个节点上，并且允许过度使用，那么过度申请资源的应用程序最终将在繁忙时间获得更多的资源。然后，所有的开发者都倾向于为他们的应用程序分配更多的资源。最终，总会有一些应用程序或者微服务由于硬件资源被申请完了而没有办法去申请到它所需的资源，所以性能很差。
-## 目标:高效的资源管理
+# 目标:高效的资源管理
 集群管理员通常会抱怨集群的总体资源利用率非常低。然而这种场景下，Kubernetes仍然无法在集群中安排更多的工作负载。但是，他们不愿意调整Pod申请资源的大小，因为这些请求被设置为处理高峰场景时使用。这种基于峰值使用的资源分配导致集群规模不断增长，大多数时候计算资源的利用率极低，以及会产生大量的机器成本。
 
 
 
 运行稳定生产服务的集群的主要目标是通过有效地使用所有节点来最小化机器成本。为了实现这个目标，Kubernetes调度器可以了解资源分配和实际资源利用之间的差距。利用间隔的调度器可以帮助更有效地打包pod，而默认调度器则不能。目前有两个主要目标:将节点利用率维持在一定的水平，并平衡节点之间的利用率变化。
-## 将节点利用率维持在一定的水平
+# 将节点利用率维持在一定的水平
 尽可能地提高资源利用率可能不是所有集群的正确解决方案。由于扩展集群以处理突然的负载峰值总是需要时间，集群管理员希望为突然的负载留出足够的空间，以确保有足够的时间向集群添加更多的节点。
 
 
 
 根据之前对实际工作负载的观察，集群管理员发现负载具有一定的季节性，和且周期性。然而，在将新节点添加到集群之前，资源利用率如果总是增加x%。集群管理员希望维护集群，使所有节点的平均利用率在100 - x%左右或以下即可。
-## 平衡高峰使用的风险
+# 平衡高峰使用的风险
 在某些情况下，调度Pod以维持所有节点的平均利用率也是有风险的，因为不知道不同节点的利用率如何变化
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/82580366ade74685afe5c1b805ccce53.png?x-oss-process=image/watermark,type_ZHJvaWRzYW5zZmFsbGJhY2s,shadow_50,text_Q1NETiBA5ZWG5pyd,size_20,color_FFFFFF,t_70,g_se,x_16)
 例如，假设两个节点有8个CPU，每个节点上只请求5个CPU。在这种情况下，默认调度器将认为这两个节点是等效的(假设其他一切都是相同的)。而且，可以对节点评分算法进行扩展，以有利于选用在给定时间段(例如，最近6小时)内平均实际利用率较低的节点。
@@ -38,25 +32,25 @@
 
 除了根据实际使用情况进行有效调度外，还需要一个高级调度器来平衡高峰使用期间资源争用的风险。
 
-## Trimaran:真实负载感知调度
+# Trimaran:真实负载感知调度
 为了最小化运行成本，调度程序可以了解其声明式资源分配模型和实际资源利用率之间的差距。与默认调度器相比，Pod可以更有效地打包在更少的节点中，默认调度器只考虑Pod请求和节点上的可分配资源(使用默认插件)。
 
 
 有两种调度策略可用来增强OpenShift中的现有调度:Trimaran调度程序下的[TargetLoadPacking ](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran/targetloadpacking)和[Trimaran 调度器](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran)下的[LoadVariationRiskBalancing](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran/loadvariationriskbalancing)来解决这个问题。它目前支持像Prometheus, SignalFx和Kubernetes Metrics Server这样的度量提供商。插件为所有Pod QoS保证提供调度支持。
 
-## 将节点利用率维持在指定级别:TargetLoadPacking Scheduler插件
+# 将节点利用率维持在指定级别:TargetLoadPacking Scheduler插件
 
 许多用户都希望在CPU使用中保留一些空间，作为具有阈值的缓冲区，同时让节点的数量最小化。TargetLoadPacking插件就是为此设计的。TargetLoadPacking策略将工作负载打包到节点上，直到所有节点的利用率达到目标百分比。然后，它开始在所有节点中分配工作负载。使用TargetLoadPacking策略的好处是，所有正在运行的节点都保持一个目标利用率，因此没有节点利用率不足。但是，当集群几乎满时，它不会使特定节点过度超载，这为应用程序的负载变化留下了一些空间。
 
 
 
-## 平衡利用率变化的风险:LoadVariationRiskBalancing Scheduler插件
+# 平衡利用率变化的风险:LoadVariationRiskBalancing Scheduler插件
 
 众所周知，Kubernetes调度器依赖于请求的资源，而不是实际的资源使用情况。因此，这可能会导致集群中的争用和不平衡。扩展带有某种负载感知的默认调度器，试图解决这个问题。问题是调度程序应该采用负载变化的哪些方面。最常用的度量是资源利用率的平均或移动平均。虽然简单，但它没有捕捉到随时间变化的利用率。在这种调度策略中，考虑到资源争用的风险，其思想是提高平均与标准差的度量，从而使集群达到良好的均衡。LoadVariationRiskBalancing调度策略使用了一个简单而有效的优先级函数，该函数结合了节点利用率的平均值和标准偏差的度量。
 
 
 
-## 系统设计与实现
+# 系统设计与实现
 
 我们开发了基于实时节点利用率值的[Trimaran 调度器](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran)，以有效地利用集群资源并节约成本。作为其中的一部分，我们开发了[Load Watcher](https://github.com/paypal/load-watcher)、[TargetLoadPacking插件](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran/targetloadpacking)和，并将[LoadVariationRiskBalancing插件](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran/loadvariationriskbalancing)其贡献给了开源社区。
 
@@ -101,7 +95,7 @@ TargetLoadPacking插件的目的是根据节点的实际使用情况对节点进
 
 下图描述了平衡集群的四种方法:
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/db6478797edd4f7d83124f4303ed1a13.png?x-oss-process=image/watermark,type_ZHJvaWRzYW5zZmFsbGJhY2s,shadow_50,text_Q1NETiBA5ZWG5pyd,size_20,color_FFFFFF,t_70,g_se,x_16)
-## 在OpenShift上部署Trimaran调度程序
+# 在OpenShift上部署Trimaran调度程序
 
 OpenShift用户可以通过遵循[自定义](https://docs.openshift.com/container-platform/4.7/nodes/scheduling/nodes-custom-scheduler.html?extIdCarryOver=true&sc_cid=701f2000001Css5AAC)调度文档教程部署Trimaran调度程序作为OpenShift集群中的额外调度程序。
 
@@ -241,7 +235,7 @@ spec:
           - name: etckubernetes
             mountPath: /etc/kubernetes 
 ```
-## 总结
+# 总结
 
 
 
